@@ -1,3 +1,3 @@
-# template-go-pkg
+# go-discordbot
 
-This is a template for quickly scaffolding a new golang package
+go-discordbot is a go package
