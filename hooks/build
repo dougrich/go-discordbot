@@ -13,7 +13,7 @@ CHANGES=$(git ls-files -m -o --exclude-standard)
 if [ "$SHA" != "$last_build_commit" ] || [ ! -z "$CHANGES" ]
 then
     echo "rebuilding..."
-    go build -o bin/discrdbt .
+    go build -o bin/discordbot examples/bot
     test -f ./local.conf && $((cat local.conf | grep -v last_build_commit)> local.new.conf)
     echo "last_build_commit=$SHA" >> local.new.conf
     test -f ./local.conf && rm local.conf

@@ -7,7 +7,7 @@ if test -f ./local.conf; then
     source ./local.conf
 fi 
 
-HASFMT=$(gofmt -l .)
+HASFMT=$(gofmt -l . ./examples/cmd/add ./examples/bot)
 EXITCODE=0
 if [ ! -z "$HASFMT" ]
 then
@@ -15,7 +15,7 @@ then
     exitcode=-1
 fi
 
-go test .
+go test . ./examples/cmd/add ./examples/bot
 if [ $? -ne 0 ]
 then
     echo -e "\033[1mTests need to pass before commit\033[0m"
@@ -23,7 +23,7 @@ then
     exitcode=-1
 fi
 
-go build -o bin/discrdbt .
+go build -o bin/discordbot ./examples/bot
 if [ $? -ne 0 ]
 then
     echo -e "\033[1mBuild needs to pass before commit\033[0m"

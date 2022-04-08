@@ -13,7 +13,7 @@ CHANGES=$(git ls-files -m -o --exclude-standard)
 if [ "$SHA" != "$last_lint_commit" ] || [ ! -z "$CHANGES" ]
 then
     echo "linting..."
-    go fmt .
+    go fmt . ./examples/cmd/add ./examples/bot
     test -f ./local.conf && $((cat local.conf | grep -v last_lint_commit)> local.new.conf)
     echo "last_lint_commit=$SHA" >> local.new.conf
     test -f ./local.conf && rm local.conf

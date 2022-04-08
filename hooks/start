@@ -1,0 +1,12 @@
+#!/bin/bash
+
+if test -f ./remote.conf; then
+    source ./remote.conf
+fi 
+if test -f ./local.conf; then
+    source ./local.conf
+fi 
+
+export DEVELOPMENT_BOT_TOKEN=$DEVELOPMENT_BOT_TOKEN
+export DEVELOPMENT_GUILD_ID=$DEVELOPMENT_GUILD_ID
+go run ./examples/bot

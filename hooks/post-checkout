@@ -34,3 +34,19 @@ do
         break
     fi
 done
+
+# get bot token
+if [ -z $DEVELOPMENT_BOT_TOKEN ]
+then
+    echo -e "\033[1mdiscord bot token to use locally\033[0m (https://discord.com/developers/applications/)"
+    read -r DEVELOPMENT_BOT_TOKEN
+    echo "DEVELOPMENT_BOT_TOKEN=$DEVELOPMENT_BOT_TOKEN" >> ./local.conf
+fi
+
+# get bot token
+if [ -z $DEVELOPMENT_GUILD_ID ]
+then
+    echo -e "\033[1mdiscord guild id to use for commands\033[0m"
+    read -r DEVELOPMENT_GUILD_ID
+    echo "DEVELOPMENT_GUILD_ID=$DEVELOPMENT_GUILD_ID" >> ./local.conf
+fi
