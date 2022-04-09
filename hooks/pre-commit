@@ -7,7 +7,7 @@ if test -f ./local.conf; then
     source ./local.conf
 fi 
 
-HASFMT=$(gofmt -l . ./examples/cmd/add ./examples/bot)
+HASFMT=$(gofmt -l .)
 EXITCODE=0
 if [ ! -z "$HASFMT" ]
 then
@@ -15,7 +15,7 @@ then
     exitcode=-1
 fi
 
-go test . ./examples/cmd/add ./examples/bot
+go test ./...
 if [ $? -ne 0 ]
 then
     echo -e "\033[1mTests need to pass before commit\033[0m"

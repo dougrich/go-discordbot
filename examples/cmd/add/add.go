@@ -3,6 +3,7 @@ package add
 import (
 	"context"
 
+	"github.com/bwmarrin/discordgo"
 	"github.com/dougrich/go-discordbot"
 )
 
@@ -15,14 +16,18 @@ func (CommandPackage) Name() string {
 func (CommandPackage) Register(bot *discordbot.Bot) error {
 	bot.AddCommand(
 		"add",
-		[]discordbot.Option{
+		[]*discordgo.ApplicationCommandOption{
 			{
-				Type: discordbot.OptionNumber,
-				Name: "a",
+				Type:        discordgo.ApplicationCommandOptionInteger,
+				Name:        "a",
+				Description: "integer a",
+				Required:    true,
 			},
 			{
-				Type: discordbot.OptionNumber,
-				Name: "b",
+				Type:        discordgo.ApplicationCommandOptionInteger,
+				Name:        "b",
+				Description: "integer b",
+				Required:    true,
 			},
 		},
 		"adds a + b",

@@ -13,7 +13,7 @@ CHANGES=$(git ls-files -m -o --exclude-standard)
 if [ "$SHA" != "$last_test_commit" ] || [ ! -z "$CHANGES" ]
 then
     echo "testing..."
-    go test . ./examples/cmd/add ./examples/bot
+    go test ./...
     test -f ./local.conf && $((cat local.conf | grep -v last_test_commit)> local.new.conf)
     echo "last_test_commit=$SHA" >> local.new.conf
     test -f ./local.conf && rm local.conf
