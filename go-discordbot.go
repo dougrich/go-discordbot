@@ -3,6 +3,7 @@ package discordbot
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -60,9 +61,16 @@ func (c commandMatcher) matches(
 	if isSubcommand != isInteractionSubcommand || c.cmd.Name != d.Name {
 		return false
 	}
+	if !isSubcommand {
+		return true
+	}
 
-	// either we're not a subcommand, or the subcommand name matches
-	return !isSubcommand || c.cmd.Options[0].Name == d.Options[0].Name
+	for _, o := range c.cmd.Options {
+		if o.Name == d.Options[0].Name {
+			return true
+		}
+	}
+	return false
 }
 
 type BotPackage interface {
@@ -110,12 +118,12 @@ func (bot *Bot) AddCommand(
 		// special case for subcommands
 		if c.Name == cmd.Name && isSubcommand {
 			for _, o := range c.Options {
-				if o.Type == discordgo.ApplicationCommandOptionSubCommand && o.Name == cmd.Options[0].Name {
-					bot.ErrRegistration = fmt.Errorf("Failed to register \"/%s %s\", subcommand is already registered", c.Name, cmd.Options[0].Name)
+				if o.Type == discordgo.ApplicationCommandOptionSubCommand && o.Name == cmd.Options[i].Name {
+					bot.ErrRegistration = fmt.Errorf("Failed to register \"/%s %s\", subcommand is already registered", c.Name, cmd.Options[i].Name)
 					return
 				}
 			}
-			c.Options = append(c.Options, cmd.Options[0])
+			c.Options = append(c.Options, cmd.Options[i])
 			bot.commands[i] = c
 			return
 		} else if c.Name == cmd.Name {
@@ -133,11 +141,45 @@ func (bot *Bot) Respond(ctx context.Context, mods ...MessageModifier) error {
 		Data: &discordgo.InteractionResponseData{},
 	}
 	for _, m := range mods {
-		if err := m.Modify(response); err != nil {
+		if err := m.ModifyInteraction(bot, response); err != nil {
 			return err
 		}
 	}
-	return bot.session.InteractionRespond(i.Interaction, response)
+	err := bot.session.InteractionRespond(i.Interaction, response)
+	if err != nil {
+		return err
+	}
+	msgAfter, err := bot.session.InteractionResponse(bot.session.State.User.ID, i.Interaction)
+	if err != nil {
+		return err
+	}
+	for _, m := range mods {
+		if err := m.ModifyMessageAfter(bot, msgAfter); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (bot *Bot) Message(channelID string, mods ...MessageModifier) error {
+	msgBefore := &discordgo.MessageSend{
+		TTS: false,
+	}
+	for _, m := range mods {
+		if err := m.ModifyMessage(bot, msgBefore); err != nil {
+			return err
+		}
+	}
+	msgAfter, err := bot.session.ChannelMessageSendComplex(channelID, msgBefore)
+	if err != nil {
+		return err
+	}
+	for _, m := range mods {
+		if err := m.ModifyMessageAfter(bot, msgAfter); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (b *Bot) Include(p BotPackage) *Bot {
@@ -146,7 +188,7 @@ func (b *Bot) Include(p BotPackage) *Bot {
 		if err != nil {
 			b.ErrRegistration = &errRegistration{p.Name(), err}
 		} else if b.ErrRegistration != nil {
-			b.ErrRegistration = &errRegistration{p.Name(), err}
+			b.ErrRegistration = &errRegistration{p.Name(), b.ErrRegistration}
 		}
 	}
 	return b
@@ -154,33 +196,33 @@ func (b *Bot) Include(p BotPackage) *Bot {
 
 func (bot *Bot) Start() {
 	if bot.ErrRegistration != nil {
-		log.Panicf("Invalid registration:\n%v", bot.ErrRegistration)
+		log.Panicf("discordbot: invalid registration:\n%v", bot.ErrRegistration)
 	}
 
 	defer bot.runDefers()
 
-	log.Printf("Starting bot %s", bot.options.Token)
+	log.Printf("discordbot: starting bot %s", bot.options.Token)
 	if bot.options.GuildID != "" {
-		log.Printf(">> scoped to %s", bot.options.GuildID)
+		log.Printf("discordbot: >> scoped to %s", bot.options.GuildID)
 	}
 
 	s, err := discordgo.New("Bot " + bot.options.Token)
 	if err != nil {
-		log.Panicf("Invalid bot parameters: %v", err)
+		log.Panicf("discordbot: invalid bot parameters: %v", err)
 	}
 	bot.session = s
 
 	err = s.Open()
 	if err != nil {
-		log.Panicf("Unable to start discord session: %v", err)
+		log.Panicf("discordbot: unable to start discord session: %v", err)
 	}
 	defer s.Close()
 	registeredCommands := make([]*discordgo.ApplicationCommand, len(bot.commands))
 	for i, v := range bot.commands {
-		log.Printf("Trying to create %v as %s", v, s.State.User.ID)
+		log.Printf("discordbot: trying to create %v as %s", v, s.State.User.ID)
 		cmd, err := s.ApplicationCommandCreate(s.State.User.ID, bot.options.GuildID, v)
 		if err != nil {
-			log.Panicf("Cannot create '%v' command: %v", v.Name, err)
+			log.Panicf("discordbot: cannot create '%v' command: %v", v.Name, err)
 		}
 		registeredCommands[i] = cmd
 	}
@@ -192,17 +234,18 @@ func (bot *Bot) Start() {
 	stop := make(chan os.Signal)
 	signal.Notify(stop, os.Interrupt)
 	<-stop
-	log.Println("starting shutdown from signal")
+	log.Println("discordbot: starting shutdown from signal")
 
 	// optionally remove commands
 	if bot.options.RemoveCommands {
-		log.Println("Removing commands...")
+		log.Println("discordbot: removing commands...")
 		for _, v := range registeredCommands {
 			err := s.ApplicationCommandDelete(s.State.User.ID, bot.options.GuildID, v.ID)
 			if err != nil {
-				log.Panicf("Cannot delete '%v' command: %v", v.Name, err)
+				log.Panicf("discordbot: cannot delete '%v' command: %v", v.Name, err)
 			}
 		}
+		log.Println("discordbot: commands removed")
 	}
 }
 
@@ -224,39 +267,49 @@ func (bot *Bot) handleInteraction(s *discordgo.Session, i *discordgo.Interaction
 		if !matcher.matches(s, i) {
 			continue
 		}
-		matcher.handler(ctx, arguments)
+		log.Printf("discordbot: command %s", matcher.commandname)
+		err := matcher.handler(ctx, arguments)
+		if err != nil {
+			log.Printf("discordbot: error occured in %s: %v", matcher.commandname, err)
+		}
 		return
 	}
 	// unmatched
-	log.Print("Unmatched command")
+	log.Print("discordbot: unmatched command")
 }
 
 func (bot *Bot) helpInteraction(ctx context.Context, _ *Arguments) error {
 	var sb strings.Builder
 	for _, m := range bot.matchers {
-		fmt.Fprintf(&sb, "\n**/%s", m.commandname)
+		var options []*discordgo.ApplicationCommandOption
 		for _, o := range m.options {
-			switch o.Type {
-			case discordgo.ApplicationCommandOptionInteger:
-				fmt.Fprintf(&sb, "\t%s:integer", o.Name)
-			default:
-				fmt.Fprintf(&sb, "\t%s", o.Name)
+			if o.Type == discordgo.ApplicationCommandOptionSubCommand {
+				printHelp(&sb, m.commandname, o.Name, o.Options, o.Description)
+			} else {
+				options = append(options, o)
 			}
 		}
-		fmt.Fprintf(&sb, "**\n\t%s\n", m.description)
-		for _, o := range m.options {
-			fmt.Fprintf(&sb, "\t*")
-			switch o.Type {
-			case discordgo.ApplicationCommandOptionInteger:
-				fmt.Fprintf(&sb, "%s:integer", o.Name)
-			default:
-				fmt.Fprintf(&sb, "%s", o.Name)
-			}
-			fmt.Fprintf(&sb, "*\t\t%s\n", o.Description)
+		if len(options) > 0 {
+			printHelp(&sb, m.commandname, "", options, m.description)
 		}
 	}
 
 	return bot.Respond(ctx, WithMessage(sb.String()))
+}
+
+func printHelp(out io.Writer, commandname string, subcommand string, options []*discordgo.ApplicationCommandOption, description string) {
+	fmt.Fprintf(out, "\n**/%s", commandname)
+	if subcommand != "" {
+		fmt.Fprintf(out, " %s", subcommand)
+	}
+	fmt.Fprintf(out, "**_")
+	for _, o := range options {
+		fmt.Fprintf(out, " %s:%s", o.Name, o.Type.String())
+	}
+	fmt.Fprintf(out, "_\n\t%s\n", description)
+	for _, o := range options {
+		fmt.Fprintf(out, "\t*%s:%s*\n\t\t%s\n", o.Name, o.Type.String(), o.Description)
+	}
 }
 
 func createCommand(

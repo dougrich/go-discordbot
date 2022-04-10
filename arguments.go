@@ -27,9 +27,25 @@ func (a *Arguments) Scan(dest ...interface{}) error {
 		switch ptr := d.(type) {
 		case *int64:
 			*ptr = opts[i].IntValue()
+		case *string:
+			if opts[i].Type == discordgo.ApplicationCommandOptionChannel {
+				*ptr = opts[i].ChannelValue(nil).ID
+			} else {
+				*ptr = opts[i].StringValue()
+			}
+		case *bool:
+			*ptr = opts[i].BoolValue()
 		default:
-			return fmt.Errorf("discordbot: unfamiliar scan type in arguments %T", ptr)
+			return fmt.Errorf("discordbot: unfamiliar scan type in arguments %T, supported types are *int64, *string, *bool", ptr)
 		}
 	}
 	return nil
+}
+
+func (a *Arguments) Subcommand() string {
+	opts := a.data.Options
+	if len(opts) == 0 || opts[0].Type != discordgo.ApplicationCommandOptionSubCommand {
+		return ""
+	}
+	return opts[0].Name
 }
