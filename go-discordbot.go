@@ -12,6 +12,11 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+const (
+	// context key for interaction
+	ctxKeyInteraction = "interaction"
+)
+
 // instance of a discordbot
 type Bot struct {
 	// any error that occured in registration
@@ -122,7 +127,7 @@ func (bot *Bot) AddCommand(
 }
 
 func (bot *Bot) Respond(ctx context.Context, mods ...MessageModifier) error {
-	i := ctx.Value("interaction").(*discordgo.InteractionCreate)
+	i := ctx.Value(ctxKeyInteraction).(*discordgo.InteractionCreate)
 	response := &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{},
@@ -208,7 +213,9 @@ func (bot *Bot) runDefers() {
 }
 
 func (bot *Bot) handleInteraction(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	ctx, cancel := context.WithTimeout(context.WithValue(context.Background(), "interaction", i), 5*time.Second)
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, ctxKeyInteraction, i)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	arguments := &Arguments{
 		data: i.ApplicationCommandData(),
@@ -262,4 +269,10 @@ func createCommand(
 		Description: description,
 		Options:     options,
 	}
+}
+
+// retrieves the guild id from a given slash command context
+func GuildID(ctx context.Context) string {
+	i := ctx.Value(ctxKeyInteraction).(*discordgo.InteractionCreate)
+	return i.GuildID
 }
