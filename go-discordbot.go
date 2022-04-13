@@ -32,7 +32,9 @@ type Bot struct {
 	// the session of the bot
 	session *discordgo.Session
 	// any deferred logic for after the bot cleans up
-	defers []func()
+	lifeDefers []func()
+	// any deferred logic for after each interaction
+	afterInteractions []func()
 }
 
 type BotOptions struct {
@@ -91,8 +93,12 @@ func New(options BotOptions) *Bot {
 	return b
 }
 
+func (bot *Bot) AfterInteraction(later func()) {
+	bot.afterInteractions = append(bot.afterInteractions, later)
+}
+
 func (bot *Bot) Defer(later func()) {
-	bot.defers = append(bot.defers, later)
+	bot.lifeDefers = append(bot.lifeDefers, later)
 }
 
 func (bot *Bot) AddCommand(
@@ -250,7 +256,7 @@ func (bot *Bot) Start() {
 }
 
 func (bot *Bot) runDefers() {
-	for _, d := range bot.defers {
+	for _, d := range bot.lifeDefers {
 		d()
 	}
 }
@@ -260,6 +266,9 @@ func (bot *Bot) handleInteraction(s *discordgo.Session, i *discordgo.Interaction
 	ctx = context.WithValue(ctx, ctxKeyInteraction, i)
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
+	for _, l := range bot.afterInteractions {
+		defer l()
+	}
 	arguments := &Arguments{
 		data: i.ApplicationCommandData(),
 	}
